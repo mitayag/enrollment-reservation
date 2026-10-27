@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — {{ app_name }}{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Dashboard</h1>
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="display-6 text-primary">{{ active_students }}</div>
+        <div class="text-muted">Active students</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="display-6 text-primary">{{ active_sections }}</div>
+        <div class="text-muted">Active sections</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="display-6 text-primary">{{ encoded_today }}</div>
+        <div class="text-muted">Students encoded today (Manila)</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

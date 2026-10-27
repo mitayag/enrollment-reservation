@@ -1,0 +1,14 @@
+# Development overrides: bind-mount local source and run with --reload.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+services:
+  web:
+    build:
+      context: .
+      target: development
+    command: ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log --reload"]
+    volumes:
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+      - ./tests:/app/tests
+      - ./alembic.ini:/app/alembic.ini:ro

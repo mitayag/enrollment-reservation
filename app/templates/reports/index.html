@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Reports — {{ app_name }}{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Student encoding report</h1>
+<div class="card mb-3">
+  <div class="card-body">
+    <form method="get" action="/reports/result" class="row g-2 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label" for="date_from">Encoded from</label>
+        <input class="form-control" type="date" id="date_from" name="date_from" value="{{ filters.date_from if filters else '' }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="date_to">Encoded to</label>
+        <input class="form-control" type="date" id="date_to" name="date_to" value="{{ filters.date_to if filters else '' }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="year_level">Year level</label>
+        <select class="form-select" id="year_level" name="year_level">
+          <option value="">All</option>
+          {% for yl in [1, 2, 3, 4] %}
+          <option value="{{ yl }}" {{ 'selected' if filters and filters.year_level == yl|string else '' }}>{{ yl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="section_id">Section</label>
+        <select class="form-select" id="section_id" name="section_id">
+          <option value="">All</option>
+          {% for s in sections %}
+          <option value="{{ s.id }}" data-year-level="{{ s.year_level }}"
+                  {{ 'selected' if filters and filters.section_id == s.id|string else '' }}>
+            {{ s.name }} (YL {{ s.year_level }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Generate</button>
+      </div>
+    </form>
+    <div class="form-text">Dates are Asia/Manila; stored timestamps are UTC.</div>
+  </div>
+</div>
+
+{% if has_filters %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <span class="text-muted">{{ students|length }} record(s)</span>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary btn-sm" href="/reports/print?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&year_level={{ filters.year_level }}&section_id={{ filters.section_id }}" target="_blank">Printable view</a>
+    <a class="btn btn-success btn-sm" href="/reports/export.csv?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&year_level={{ filters.year_level }}&section_id={{ filters.section_id }}">Export CSV</a>
+  </div>
+</div>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-striped mb-0">
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>Section</th><th>Year</th><th>Telephone</th><th>Email</th><th>Encoded (Manila)</th></tr>
+      </thead>
+      <tbody>
+        {% for student in students %}
+        <tr>
+          <td>{{ student.id }}</td>
+          <td>{{ student.full_name }}</td>
+          <td>{{ student.section.name if student.section else '—' }}</td>
+          <td>{{ student.section.year_level if student.section else '—' }}</td>
+          <td>{{ student.telephone or '—' }}</td>
+          <td>{{ student.email or '—' }}</td>
+          <td>{{ student.created_at | manila_time }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-4">No records match the filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const yearSelect = document.getElementById('year_level');
+  const sectionSelect = document.getElementById('section_id');
+  const preselected = sectionSelect.value;
+  function applyFilter() {
+    const yl = yearSelect.value;
+    for (const opt of sectionSelect.querySelectorAll('option[data-year-level]')) {
+      const match = !yl || opt.dataset.yearLevel === yl;
+      opt.hidden = !match;
+      opt.disabled = !match;
+    }
+    if (sectionSelect.selectedOptions.length && sectionSelect.selectedOptions[0].disabled) {
+      sectionSelect.value = '';
+    }
+  }
+  yearSelect.addEventListener('change', applyFilter);
+  applyFilter();
+})();
+</script>
+{% endblock %}

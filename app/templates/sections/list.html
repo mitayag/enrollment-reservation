@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Sections — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Sections</h1>
+  {% if current_user.role.value == 'admin' %}
+  <a class="btn btn-primary" href="/sections/new">Add section</a>
+  {% endif %}
+</div>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-striped mb-0">
+      <thead>
+        <tr>
+          <th>ID</th><th>Name</th><th>Year level</th><th>Status</th>
+          <th>Active students</th><th>Created</th><th>Created by</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for section in sections %}
+        <tr>
+          <td>{{ section.id }}</td>
+          <td>{{ section.name }}</td>
+          <td>{{ section.year_level }}</td>
+          <td>
+            <span class="badge {{ 'bg-success' if section.is_active else 'bg-secondary' }}">
+              {{ 'Active' if section.is_active else 'Inactive' }}
+            </span>
+          </td>
+          <td>{{ counts.get(section.id, 0) }}</td>
+          <td>{{ section.created_at | manila_time }}</td>
+          <td>{{ section.creator.full_name if section.creator else section.created_by }}</td>
+          <td class="text-end">
+            {% if current_user.role.value == 'admin' %}
+            <a class="btn btn-sm btn-outline-primary" href="/sections/{{ section.id }}/edit">Edit</a>
+            <form method="post" action="/sections/{{ section.id }}/toggle" class="d-inline">
+              <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+              <button type="submit" class="btn btn-sm btn-outline-{{ 'secondary' if section.is_active else 'success' }}">
+                {{ 'Deactivate' if section.is_active else 'Activate' }}
+              </button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center text-muted py-4">No sections yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<p class="text-muted small mt-2">Deactivated sections remain attached to historical student records.</p>
+{% endblock %}

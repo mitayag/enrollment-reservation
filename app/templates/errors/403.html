@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}403 — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="text-center py-5">
+  <h1 class="display-5">403</h1>
+  <p class="lead">You do not have permission to perform this action.</p>
+  {% if detail %}<p class="text-muted">{{ detail }}</p>{% endif %}
+  <a class="btn btn-primary" href="/">Back to dashboard</a>
+</div>
+{% endblock %}

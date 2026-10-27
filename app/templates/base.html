@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='vendor/bootstrap.min.css') }}">
+  <style>
+    body { background: #f5f7fa; }
+    .navbar-brand { font-weight: 600; }
+    .card { border: none; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .table > :not(caption) > * > * { vertical-align: middle; }
+  </style>
+</head>
+<body>
+{% if current_user %}
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+  <div class="container">
+    <a class="navbar-brand" href="/">Enrollment Reservation</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav me-auto">
+        <li class="nav-item"><a class="nav-link" href="/">Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="/students">Students</a></li>
+        <li class="nav-item"><a class="nav-link" href="/sections">Sections</a></li>
+        <li class="nav-item"><a class="nav-link" href="/reports">Reports</a></li>
+        {% if current_user.role.value == 'admin' %}
+        <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+        {% endif %}
+      </ul>
+      <span class="navbar-text me-3 text-white">{{ current_user.full_name }} ({{ current_user.role.value }})</span>
+      <form method="post" action="/logout" class="d-inline">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-outline-light btn-sm">Log out</button>
+      </form>
+    </div>
+  </div>
+</nav>
+{% endif %}
+<main class="container pb-5">
+  {% block content %}{% endblock %}
+</main>
+<script src="{{ url_for('static', path='vendor/bootstrap.bundle.min.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

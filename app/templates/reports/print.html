@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Student Encoding Report</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='vendor/bootstrap.min.css') }}">
+  <style>
+    @media print { .no-print { display: none; } body { background: #fff; } }
+  </style>
+</head>
+<body class="p-4">
+  <div class="d-flex justify-content-between align-items-center no-print mb-3">
+    <h1 class="h4 mb-0">Student Encoding Report</h1>
+    <button class="btn btn-primary" onclick="window.print()">Print</button>
+  </div>
+  <p class="text-muted small">
+    {% if filters.date_from %}From {{ filters.date_from }} {% endif %}
+    {% if filters.date_to %}to {{ filters.date_to }} {% endif %}
+    {% if filters.year_level %}| Year level {{ filters.year_level }} {% endif %}
+    {% if filters.section_id %}| Section ID {{ filters.section_id }} {% endif %}
+    — dates in Asia/Manila · {{ students|length }} record(s)
+  </p>
+  <table class="table table-bordered table-sm">
+    <thead>
+      <tr><th>ID</th><th>Last</th><th>First</th><th>M.I.</th><th>Section</th><th>Year</th><th>Telephone</th><th>Email</th><th>Encoded (Manila)</th></tr>
+    </thead>
+    <tbody>
+      {% for student in students %}
+      <tr>
+        <td>{{ student.id }}</td>
+        <td>{{ student.last_name }}</td>
+        <td>{{ student.first_name }}</td>
+        <td>{{ student.middle_initial or '' }}</td>
+        <td>{{ student.section.name if student.section else '' }}</td>
+        <td>{{ student.section.year_level if student.section else '' }}</td>
+        <td>{{ student.telephone or '' }}</td>
+        <td>{{ student.email or '' }}</td>
+        <td>{{ student.created_at | manila_time }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="text-center text-muted">No records match the filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

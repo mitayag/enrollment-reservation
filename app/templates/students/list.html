@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Students — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Students</h1>
+  <a class="btn btn-primary" href="/students/new">Add student</a>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <form method="get" action="/students" class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label" for="q">Search name</label>
+        <input class="form-control" id="q" name="q" value="{{ q }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="year_level">Year level</label>
+        <select class="form-select" id="year_level" name="year_level">
+          <option value="">All</option>
+          {% for yl in [1, 2, 3, 4] %}
+          <option value="{{ yl }}" {{ 'selected' if year_level == yl else '' }}>{{ yl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="section_id">Section</label>
+        <select class="form-select" id="section_id" name="section_id">
+          <option value="">All</option>
+          {% for s in sections %}
+          <option value="{{ s.id }}" data-year-level="{{ s.year_level }}"
+                  {{ 'selected' if section_id == s.id else '' }}>{{ s.name }} (YL {{ s.year_level }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if current_user.role.value == 'admin' %}
+      <div class="col-md-2">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="show_deleted" value="true" id="show_deleted"
+                 {{ 'checked' if include_deleted else '' }}>
+          <label class="form-check-label" for="show_deleted">Show deleted</label>
+        </div>
+      </div>
+      {% endif %}
+      <div class="col-md-2">
+        <button type="submit" class="btn btn-outline-primary w-100">Filter</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-striped mb-0">
+      <thead>
+        <tr>
+          <th>ID</th><th>Name</th><th>Telephone</th><th>Email</th>
+          <th>Section</th><th>Year</th><th>Encoded</th><th>Encoded by</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for student in students %}
+        <tr class="{{ 'table-secondary' if student.is_deleted else '' }}">
+          <td>{{ student.id }}</td>
+          <td>{{ student.full_name }}{% if student.is_deleted %} <span class="badge bg-danger">Deleted</span>{% endif %}</td>
+          <td>{{ student.telephone or '—' }}</td>
+          <td>{{ student.email or '—' }}</td>
+          <td>{{ student.section.name if student.section else '—' }}</td>
+          <td>{{ student.section.year_level if student.section else '—' }}</td>
+          <td>{{ student.created_at | manila_time }}</td>
+          <td>{{ student.creator.full_name if student.creator else student.created_by }}</td>
+          <td class="text-end text-nowrap">
+            {% if not student.is_deleted and (current_user.role.value == 'admin' or student.created_by == current_user.id) %}
+            <a class="btn btn-sm btn-outline-primary" href="/students/{{ student.id }}/edit">Edit</a>
+            <form method="post" action="/students/{{ student.id }}/delete" class="d-inline"
+                  onsubmit="return confirm('Soft-delete this student?');">
+              <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="text-center text-muted py-4">No students found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if total_pages > 1 %}
+<nav class="mt-3">
+  <ul class="pagination justify-content-center">
+    {% for p in range(1, total_pages + 1) %}
+    <li class="page-item {{ 'active' if p == page else '' }}">
+      <a class="page-link" href="/students?page={{ p }}&q={{ q }}{% if section_id %}&section_id={{ section_id }}{% endif %}{% if year_level %}&year_level={{ year_level }}{% endif %}">{{ p }}</a>
+    </li>
+    {% endfor %}
+  </ul>
+</nav>
+{% endif %}
+<p class="text-muted small mt-2">Total: {{ total }} student(s). Faculty may edit or delete only records they created.</p>
+{% endblock %}

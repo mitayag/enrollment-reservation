@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if student else 'Add' }} student — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <h1 class="h3 mb-3">{{ 'Edit student' if student else 'Add student' }}</h1>
+    {% if errors %}
+    <div class="alert alert-danger"><ul class="mb-0">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+    {% endif %}
+    <div class="card">
+      <div class="card-body">
+        {% set f = form if form is defined and form else none %}
+        <form method="post" action="{{ '/students/%s/edit'|format(student.id) if student else '/students/new' }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label" for="last_name">Last name</label>
+              <input class="form-control" id="last_name" name="last_name" maxlength="100" required
+                     value="{{ f.last_name if f else (student.last_name if student else '') }}">
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label" for="first_name">First name</label>
+              <input class="form-control" id="first_name" name="first_name" maxlength="100" required
+                     value="{{ f.first_name if f else (student.first_name if student else '') }}">
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label" for="middle_initial">Middle initial</label>
+              <input class="form-control" id="middle_initial" name="middle_initial" maxlength="10"
+                     value="{{ f.middle_initial if f else (student.middle_initial if student and student.middle_initial else '') }}">
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label" for="telephone">Telephone</label>
+              <input class="form-control" id="telephone" name="telephone" maxlength="50"
+                     value="{{ f.telephone if f else (student.telephone if student and student.telephone else '') }}">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label" for="email">Email</label>
+              <input class="form-control" type="email" id="email" name="email" maxlength="255"
+                     value="{{ f.email if f else (student.email if student and student.email else '') }}">
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label" for="year_level_filter">Year level (filters sections)</label>
+              <select class="form-select" id="year_level_filter">
+                <option value="">All</option>
+                {% for yl in [1, 2, 3, 4] %}
+                <option value="{{ yl }}">{{ yl }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label" for="section_id">Section</label>
+              <select class="form-select" id="section_id" name="section_id" required>
+                <option value="">Select section…</option>
+                {% for s in sections %}
+                <option value="{{ s.id }}" data-year-level="{{ s.year_level }}"
+                        {{ 'selected' if (f and f.section_id == s.id) or (not f and student and student.section_id == s.id) else '' }}>
+                  {{ s.name }} (YL {{ s.year_level }}){{ ' — inactive' if not s.is_active else '' }}
+                </option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Year level is derived from the selected section.</div>
+            </div>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <a class="btn btn-outline-secondary" href="/students">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const yearSelect = document.getElementById('year_level_filter');
+  const sectionSelect = document.getElementById('section_id');
+  const preselected = sectionSelect.value;
+  function applyFilter() {
+    const yl = yearSelect.value;
+    let firstVisible = null;
+    for (const opt of sectionSelect.querySelectorAll('option[data-year-level]')) {
+      const match = !yl || opt.dataset.yearLevel === yl;
+      opt.hidden = !match;
+      opt.disabled = !match;
+      if (match && !firstVisible) firstVisible = opt;
+    }
+    if (yl && preselected) {
+      const pre = sectionSelect.querySelector('option[value="' + preselected + '"]');
+      if (pre && !pre.hidden) sectionSelect.value = preselected;
+      else sectionSelect.value = '';
+    } else if (yl && !sectionSelect.value) {
+      sectionSelect.value = '';
+    }
+  }
+  yearSelect.addEventListener('change', applyFilter);
+  // Initialize: reveal the year level of the preselected section.
+  if (preselected) {
+    const pre = sectionSelect.querySelector('option[value="' + preselected + '"]');
+    if (pre) { yearSelect.value = pre.dataset.yearLevel; }
+  }
+  applyFilter();
+})();
+</script>
+{% endblock %}
