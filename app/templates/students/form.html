@@ -4,6 +4,21 @@
 <div class="row justify-content-center">
   <div class="col-md-8 col-lg-6">
     <h1 class="h3 mb-3">{{ 'Edit student' if student else 'Add student' }}</h1>
+
+    {% if not student %}
+    <div class="card mb-3">
+      <div class="card-body">
+        <h2 class="h6 mb-2">Search Student Masterlist</h2>
+        <p class="text-muted small mb-2">Search by student number or name. Selecting a result only fills the form below —
+          nothing is saved until you review and submit.</p>
+        <input class="form-control mb-2" id="lookupQuery" type="search" placeholder="Student number or name…"
+               autocomplete="off" aria-label="Search student masterlist">
+        <div id="lookupStatus" class="form-text d-none"></div>
+        <div class="list-group" id="lookupResults"></div>
+      </div>
+    </div>
+    {% endif %}
+
     {% if errors %}
     <div class="alert alert-danger"><ul class="mb-0">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
     {% endif %}
@@ -12,6 +27,14 @@
         {% set f = form if form is defined and form else none %}
         <form method="post" action="{{ '/students/%s/edit'|format(student.id) if student else '/students/new' }}">
           <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          {% if not student %}
+          <input type="hidden" name="masterlist_student_number" id="mlNumber" value="{{ f.masterlist_student_number if f else '' }}">
+          <input type="hidden" name="masterlist_entry_id" id="mlEntryId" value="{{ f.masterlist_entry_id if f else '' }}">
+          <div class="alert alert-info py-2 d-none" id="mlBadge">
+            Filled from masterlist — <span id="mlBadgeText"></span>. Review before saving.
+            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="mlClear">Clear</button>
+          </div>
+          {% endif %}
           <div class="row">
             <div class="col-md-4 mb-3">
               <label class="form-label" for="last_name">Last name</label>
@@ -78,6 +101,80 @@
 {% block scripts %}
 <script>
 (function () {
+  {% if not student %}
+  // --- Masterlist lookup (populates the form only; never auto-saves) ---
+  const qInput = document.getElementById('lookupQuery');
+  const results = document.getElementById('lookupResults');
+  const status = document.getElementById('lookupStatus');
+  const mlNumber = document.getElementById('mlNumber');
+  const mlEntryId = document.getElementById('mlEntryId');
+  const mlBadge = document.getElementById('mlBadge');
+  const mlBadgeText = document.getElementById('mlBadgeText');
+  let debounce = null;
+  let offset = 0;
+  let lastQuery = '';
+
+  function renderResults(data) {
+    results.innerHTML = '';
+    (data.results || []).forEach(function (r) {
+      const label = (r.last_name || '') + ', ' + (r.first_name || '') + (r.middle_initial ? ' ' + r.middle_initial + '.' : '') +
+        (r.student_number ? ' · #' + r.student_number : '') +
+        (r.telephone ? ' · ' + r.telephone : '');
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'list-group-item list-group-item-action';
+      item.textContent = label;
+      item.addEventListener('click', function () { selectResult(r); });
+      results.appendChild(item);
+    });
+    if (data.has_more) {
+      const more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'list-group-item list-group-item-action list-group-item-secondary';
+      more.textContent = 'Load more…';
+      more.addEventListener('click', function () { offset += data.limit; search(true); });
+      results.appendChild(more);
+    }
+    status.textContent = data.total + ' match(es). Selecting fills the form for review.';
+    status.classList.remove('d-none');
+  }
+
+  function selectResult(r) {
+    document.getElementById('first_name').value = r.first_name || '';
+    document.getElementById('last_name').value = r.last_name || '';
+    document.getElementById('middle_initial').value = r.middle_initial || '';
+    document.getElementById('telephone').value = r.telephone || '';
+    document.getElementById('email').value = r.email || '';
+    mlNumber.value = r.student_number || '';
+    mlEntryId.value = r.id || '';
+    mlBadgeText.textContent = (r.student_number ? 'Student #' + r.student_number : 'Masterlist entry ' + r.id);
+    mlBadge.classList.remove('d-none');
+    results.innerHTML = '';
+    status.textContent = 'Form populated — review and edit before saving.';
+  }
+
+  function search(append) {
+    if (!append) offset = 0;
+    const q = qInput.value.trim();
+    if (q.length < 2) { results.innerHTML = ''; status.classList.add('d-none'); return; }
+    lastQuery = q;
+    fetch('/students/lookup?q=' + encodeURIComponent(q) + '&offset=' + offset)
+      .then(r => r.json())
+      .then(data => { if (lastQuery === q) renderResults(data); })
+      .catch(() => { status.textContent = 'Search failed.'; status.classList.remove('d-none'); });
+  }
+
+  qInput.addEventListener('input', function () {
+    clearTimeout(debounce);
+    debounce = setTimeout(function () { search(false); }, 250);
+  });
+  document.getElementById('mlClear').addEventListener('click', function () {
+    mlNumber.value = ''; mlEntryId.value = '';
+    mlBadge.classList.add('d-none');
+    qInput.value = ''; results.innerHTML = ''; status.classList.add('d-none');
+  });
+  {% endif %}
+
   const yearSelect = document.getElementById('year_level_filter');
   const sectionSelect = document.getElementById('section_id');
   const preselected = sectionSelect.value;

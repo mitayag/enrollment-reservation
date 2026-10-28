@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Reset Password — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <h1 class="h3 mb-3">Reset password — {{ target.full_name }}</h1>
+    <p class="text-muted">Set a temporary password for <strong>{{ target.email }}</strong>.
+      The user will be required to change it at their next login.</p>
+    {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
+    {% if errors %}
+    <div class="alert alert-danger"><ul class="mb-0">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+    {% endif %}
+    <div class="card">
+      <div class="card-body">
+        <form method="post" action="/admin/users/{{ target.id }}/reset-password">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          <div class="mb-3">
+            <label class="form-label" for="new_password">Temporary password</label>
+            <input class="form-control" type="password" id="new_password" name="new_password" required minlength="12" autocomplete="new-password">
+            <div class="form-text">Minimum 12 characters. Share it with the user through a secure channel.</div>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Set temporary password</button>
+            <a class="btn btn-outline-secondary" href="/admin/users">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

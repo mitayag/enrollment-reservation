@@ -3,13 +3,13 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
-from app.routers import admin, auth, dashboard, reports, sections, students
-from app.security import csrf_token_valid
+from app.routers import account, admin, auth, dashboard, masterlist, reports, sections, students
+from app.security import MustChangePasswordError, csrf_token_valid
 from app.templating import render
 
 logging.basicConfig(level=logging.INFO)
@@ -107,6 +107,8 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
+        if isinstance(exc, MustChangePasswordError):
+            return RedirectResponse("/account/password", status_code=303)
         if exc.status_code == 401:
             next_url = request.url.path
             if request.url.query:
@@ -116,6 +118,10 @@ def create_app() -> FastAPI:
             return render(request, "errors/404.html", {}, status_code=404)
         if exc.status_code == 403:
             return render(request, "errors/403.html", {"detail": exc.detail}, status_code=403)
+        # API/XHR clients (Accept without text/html) receive JSON.
+        accept = request.headers.get("accept", "")
+        if "text/html" not in accept:
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
         return HTMLResponse(
             f"<h1>Error {exc.status_code}</h1><p>{exc.detail}</p>", status_code=exc.status_code
         )
@@ -123,11 +129,13 @@ def create_app() -> FastAPI:
     app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 
     app.include_router(auth.router)
+    app.include_router(account.router)
     app.include_router(dashboard.router)
     app.include_router(sections.router)
     app.include_router(students.router)
     app.include_router(reports.router)
     app.include_router(admin.router)
+    app.include_router(masterlist.router)
 
     return app
 

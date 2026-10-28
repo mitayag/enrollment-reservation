@@ -20,8 +20,9 @@
           <td><span class="badge {{ 'bg-danger' if u.role.value == 'admin' else 'bg-info text-dark' }}">{{ u.role.value }}</span></td>
           <td><span class="badge {{ 'bg-success' if u.is_active else 'bg-secondary' }}">{{ 'Active' if u.is_active else 'Inactive' }}</span></td>
           <td>{{ u.created_at | manila_time }}</td>
-          <td class="text-end">
+          <td class="text-end text-nowrap">
             {% if u.id != current_user.id %}
+            <a class="btn btn-sm btn-outline-warning" href="/admin/users/{{ u.id }}/reset-password">Reset password</a>
             <form method="post" action="/admin/users/{{ u.id }}/toggle" class="d-inline">
               <input type="hidden" name="_csrf" value="{{ csrf_token }}">
               <button type="submit" class="btn btn-sm btn-outline-{{ 'secondary' if u.is_active else 'success' }}">

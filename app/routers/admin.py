@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import Role, User
 from app.security import require_admin
-from app.services import auth_service
+from app.services import auth_service, password_service
 from app.templating import render
 
 router = APIRouter(prefix="/admin/users", tags=["admin"])
@@ -63,3 +63,54 @@ def toggle_user(
         raise HTTPException(status_code=400, detail="You cannot deactivate your own account.")
     auth_service.set_user_active(db, user, not user.is_active)
     return RedirectResponse("/admin/users", status_code=303)
+
+
+@router.get("/{user_id}/reset-password")
+def reset_password_page(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    target = db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status_code=404)
+    if target.id == admin.id:
+        raise HTTPException(status_code=400, detail="Use the Change Password page for your own password.")
+    return render(
+        request,
+        "admin/user_reset.html",
+        {"target": target, "errors": [], "success": None},
+    )
+
+
+@router.post("/{user_id}/reset-password")
+def reset_password(
+    user_id: int,
+    request: Request,
+    new_password: str = Form(...),
+    db: Session = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    target = db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status_code=404)
+    errors = password_service.admin_reset_password(
+        db, actor=admin, target=target, new_password=new_password
+    )
+    if errors:
+        return render(
+            request,
+            "admin/user_reset.html",
+            {"target": target, "errors": errors, "success": None},
+            status_code=400,
+        )
+    return render(
+        request,
+        "admin/user_reset.html",
+        {
+            "target": target,
+            "errors": [],
+            "success": "Temporary password set. The user must change it at next login.",
+        },
+    )

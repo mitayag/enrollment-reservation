@@ -25,6 +25,10 @@ class Student(Base):
     )
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    masterlist_student_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    masterlist_entry_id: Mapped[int | None] = mapped_column(
+        ForeignKey("student_masterlist.id", ondelete="SET NULL"), nullable=True
+    )
 
     section: Mapped["Section"] = relationship("Section", back_populates="students")
     creator: Mapped["User"] = relationship("User")

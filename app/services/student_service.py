@@ -92,6 +92,8 @@ def create_student(
     email: str,
     section_id: int,
     created_by: int,
+    masterlist_student_number: str = "",
+    masterlist_entry_id: int | None = None,
 ) -> tuple[Student | None, list[str]]:
     errors = validate_student_input(
         db,
@@ -102,6 +104,18 @@ def create_student(
         email=email,
         section_id=section_id,
     )
+    number = masterlist_student_number.strip()[:50]
+    if number:
+        existing = db.scalar(
+            select(Student).where(
+                Student.masterlist_student_number == number,
+                Student.deleted_at.is_(None),
+            )
+        )
+        if existing is not None:
+            errors.append(
+                "An active enrollment reservation already exists for this student number."
+            )
     if errors:
         return None, errors
     student = Student(
@@ -112,6 +126,8 @@ def create_student(
         email=email.strip().lower() or None,
         section_id=section_id,
         created_by=created_by,
+        masterlist_student_number=number or None,
+        masterlist_entry_id=masterlist_entry_id,
     )
     db.add(student)
     db.commit()

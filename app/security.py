@@ -14,6 +14,16 @@ from app.models.user import Role, User
 MANILA = ZoneInfo("Asia/Manila")
 MIN_PASSWORD_LENGTH = 12
 
+# Paths a user with must_change_password may still reach.
+MUST_CHANGE_ALLOWED_PATHS = {"/account/password", "/logout"}
+
+
+class MustChangePasswordError(HTTPException):
+    """Raised when a user with a temporary password tries to use the app."""
+
+    def __init__(self) -> None:
+        super().__init__(status_code=403, detail="MUST_CHANGE_PASSWORD")
+
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -43,6 +53,8 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
         raise HTTPException(status_code=401)
     request.state.user = user
     ensure_csrf_token(request)
+    if user.must_change_password and request.url.path not in MUST_CHANGE_ALLOWED_PATHS:
+        raise MustChangePasswordError()
     return user
 
 

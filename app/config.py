@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     session_max_age: int = 60 * 60 * 8  # 8 hours
     debug: bool = False
+    masterlist_max_upload_bytes: int = 10 * 1024 * 1024  # 10 MB
+    masterlist_lookup_limit: int = 10
 
 
 @lru_cache

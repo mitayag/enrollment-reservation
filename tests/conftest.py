@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import app.database as app_database
 from app.database import Base, get_db
 from app.main import app
 from app.models.section import Section
@@ -23,6 +24,10 @@ engine = create_engine(
     poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+# Background jobs (masterlist validation/import) open their own sessions via
+# app.database.SessionLocal — point them at the test database.
+app_database.SessionLocal = TestingSessionLocal
 
 
 @pytest.fixture()
