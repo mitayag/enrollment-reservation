@@ -8,7 +8,11 @@
 
 <div class="card mb-3">
   <div class="card-body">
-    <form method="get" action="/students" class="row g-2 align-items-end">
+    {% if error %}
+    <div class="alert alert-danger" role="alert">{{ error }}</div>
+    {% endif %}
+    <form method="get" action="/students" class="row g-2 align-items-end"
+          onsubmit="return omitBlankFilters(this);">
       <div class="col-md-3">
         <label class="form-label" for="q">Search name</label>
         <input class="form-control" id="q" name="q" value="{{ q }}">
@@ -92,11 +96,25 @@
   <ul class="pagination justify-content-center">
     {% for p in range(1, total_pages + 1) %}
     <li class="page-item {{ 'active' if p == page else '' }}">
-      <a class="page-link" href="/students?page={{ p }}&q={{ q }}{% if section_id %}&section_id={{ section_id }}{% endif %}{% if year_level %}&year_level={{ year_level }}{% endif %}">{{ p }}</a>
+      <a class="page-link" href="/students?page={{ p }}&q={{ q | urlencode }}{% if section_id %}&section_id={{ section_id }}{% endif %}{% if year_level %}&year_level={{ year_level }}{% endif %}{% if include_deleted %}&show_deleted=true{% endif %}">{{ p }}</a>
     </li>
     {% endfor %}
   </ul>
 </nav>
 {% endif %}
 <p class="text-muted small mt-2">Total: {{ total }} student(s). Faculty may edit or delete only records they created.</p>
+<script>
+  // Drop blank filter controls (the "All" option) so the query string
+  // never contains empty section_id=/year_level= values.
+  function omitBlankFilters(form) {
+    for (const el of form.querySelectorAll('input[name], select[name]')) {
+      if (String(el.value).trim() === '') {
+        el.removeAttribute('name');
+      } else if (el.type === 'checkbox' && !el.checked) {
+        el.removeAttribute('name');
+      }
+    }
+    return true;
+  }
+</script>
 {% endblock %}

@@ -201,3 +201,139 @@ class TestStudentCRUD:
         )
         assert resp.status_code == 400
         assert "not active" in resp.text
+
+
+class TestStudentListFilters:
+    """Empty/omitted filter params must mean "All" — never a 422."""
+
+    def test_empty_filter_params_are_treated_as_all(self, client, db_session, seed_users):
+        section = make_section(db_session, name="FL-E", year_level=1, created_by=seed_users["admin"].id)
+        make_student(db_session, first_name="Empty", last_name="Params", section_id=section.id, created_by=seed_users["admin"].id)
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        resp = client.get("/students?q=&section_id=&year_level=")
+        assert resp.status_code == 200
+        assert "Params" in resp.text
+
+    def test_missing_filter_params_are_treated_as_all(self, client, db_session, seed_users):
+        section = make_section(db_session, name="FL-M", year_level=1, created_by=seed_users["admin"].id)
+        make_student(db_session, first_name="Missing", last_name="Params", section_id=section.id, created_by=seed_users["admin"].id)
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        resp = client.get("/students")
+        assert resp.status_code == 200
+        assert "Params" in resp.text
+
+    def test_whitespace_filter_params_are_treated_as_all(self, client, db_session, seed_users):
+        section = make_section(db_session, name="FL-W", year_level=1, created_by=seed_users["admin"].id)
+        make_student(db_session, first_name="White", last_name="Space", section_id=section.id, created_by=seed_users["admin"].id)
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        resp = client.get("/students?q=%20&section_id=%20%20&year_level=%20")
+        assert resp.status_code == 200
+        assert "Space" in resp.text
+
+    def test_name_only_filter(self, client, db_session, seed_users):
+        section = make_section(db_session, name="FL-N", year_level=1, created_by=seed_users["admin"].id)
+        make_student(db_session, first_name="Findme", last_name="Only", section_id=section.id, created_by=seed_users["admin"].id)
+        make_student(db_session, first_name="Other", last_name="Person", section_id=section.id, created_by=seed_users["admin"].id)
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        resp = client.get("/students?q=Findme")
+        assert resp.status_code == 200
+        assert "Findme" in resp.text
+        assert "Person" not in resp.text
+
+    def test_year_level_only_filter(self, client, db_session, seed_users):
+        admin = seed_users["admin"]
+        s1 = make_section(db_session, name="FL-Y1", year_level=1, created_by=admin.id)
+        s2 = make_section(db_session, name="FL-Y2", year_level=2, created_by=admin.id)
+        make_student(db_session, first_name="Year", last_name="Two", section_id=s2.id, created_by=admin.id)
+        make_student(db_session, first_name="Year", last_name="One", section_id=s1.id, created_by=admin.id)
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        resp = client.get("/students?year_level=2")
+        assert resp.status_code == 200
+        assert "Two" in resp.text
+        assert "One" not in resp.text
+
+    def test_section_only_filter(self, client, db_session, seed_users):
+        admin = seed_users["admin"]
+        s1 = make_section(db_session, name="FL-S1", year_level=1, created_by=admin.id)
+        s2 = make_section(db_session, name="FL-S2", year_level=2, created_by=admin.id)
+        make_student(db_session, first_name="Sec", last_name="One", section_id=s1.id, created_by=admin.id)
+        make_student(db_session, first_name="Sec", last_name="Two", section_id=s2.id, created_by=admin.id)
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        resp = client.get(f"/students?section_id={s1.id}")
+        assert resp.status_code == 200
+        assert "One, Sec" in resp.text
+        assert "Two, Sec" not in resp.text
+
+    def test_name_year_level_and_section_combined(self, client, db_session, seed_users):
+        admin = seed_users["admin"]
+        s1 = make_section(db_session, name="FL-C1", year_level=1, created_by=admin.id)
+        s2 = make_section(db_session, name="FL-C2", year_level=2, created_by=admin.id)
+        s3 = make_section(db_session, name="FL-C3", year_level=3, created_by=admin.id)
+        make_student(db_session, first_name="Combo", last_name="Match", section_id=s2.id, created_by=admin.id)
+        make_student(db_session, first_name="Combo", last_name="Wrongsec", section_id=s1.id, created_by=admin.id)
+        make_student(db_session, first_name="Combo", last_name="Wroong", section_id=s3.id, created_by=admin.id)
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        resp = client.get(f"/students?q=Combo&year_level=2&section_id={s2.id}")
+        assert resp.status_code == 200
+        assert "Match, Combo" in resp.text
+        assert "Wrongsec" not in resp.text
+        assert "Wroong" not in resp.text
+
+    def test_all_year_levels_and_all_sections(self, client, db_session, seed_users):
+        admin = seed_users["admin"]
+        s1 = make_section(db_session, name="FL-A1", year_level=1, created_by=admin.id)
+        s2 = make_section(db_session, name="FL-A2", year_level=3, created_by=admin.id)
+        make_student(db_session, first_name="Any", last_name="First", section_id=s1.id, created_by=admin.id)
+        make_student(db_session, first_name="Any", last_name="Second", section_id=s2.id, created_by=admin.id)
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        resp = client.get("/students?q=Any&section_id=&year_level=")
+        assert resp.status_code == 200
+        assert "First, Any" in resp.text
+        assert "Second, Any" in resp.text
+
+    def test_invalid_section_id_returns_controlled_400(self, client, seed_users):
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        resp = client.get("/students?section_id=abc")
+        assert resp.status_code == 400
+        assert "must be a positive integer" in resp.text
+
+    def test_invalid_year_level_returns_controlled_400(self, client, seed_users):
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        # %2B decodes to a literal "+"; a bare "+" would decode to a space.
+        for bad in ("-1", "0", "1.5", "%2B2"):
+            resp = client.get(f"/students?year_level={bad}")
+            assert resp.status_code == 400, bad
+            assert "must be a positive integer" in resp.text
+
+    def test_form_omits_blank_filters_via_script(self, client, seed_users):
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        resp = client.get("/students")
+        assert resp.status_code == 200
+        assert "omitBlankFilters" in resp.text
+
+    def test_pagination_preserves_active_filters(self, client, db_session, seed_users):
+        from app.services import student_service
+
+        admin = seed_users["admin"]
+        section = make_section(db_session, name="FL-PG", year_level=2, created_by=admin.id)
+        other = make_section(db_session, name="FL-PG-OTHER", year_level=1, created_by=admin.id)
+        for i in range(student_service.PAGE_SIZE + 1):
+            make_student(
+                db_session,
+                first_name="Paginated",
+                last_name=f"Zed{i:02d}",
+                section_id=section.id,
+                created_by=admin.id,
+            )
+        make_student(db_session, first_name="Paginated", last_name="Elsewhere", section_id=other.id, created_by=admin.id)
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        resp = client.get(
+            f"/students?page=2&q=Paginated&year_level=2&section_id={section.id}&show_deleted=true"
+        )
+        assert resp.status_code == 200
+        assert "Zed25" in resp.text  # the 26th row lands on page 2
+        assert "Elsewhere" not in resp.text
+        page_two_href = (
+            f"/students?page=2&q=Paginated&section_id={section.id}&year_level=2&show_deleted=true"
+        )
+        assert page_two_href in resp.text

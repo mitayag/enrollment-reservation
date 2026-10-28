@@ -16,6 +16,18 @@ def _form_context(form: dict | None = None) -> dict:
     return {"form": form or {}}
 
 
+def _parse_optional_positive_int(raw: str | None, label: str) -> int | None:
+    """Empty/whitespace values mean "All" (None); anything else must be a positive integer."""
+    if raw is None:
+        return None
+    value = raw.strip()
+    if not value:
+        return None
+    if not value.isdigit() or int(value) < 1:
+        raise ValueError(f"{label} filter must be a positive integer.")
+    return int(value)
+
+
 @router.get("/lookup")
 def lookup_masterlist(
     request: Request,
@@ -53,23 +65,44 @@ def lookup_masterlist(
 def list_students_page(
     request: Request,
     q: str | None = None,
-    section_id: int | None = None,
-    year_level: int | None = None,
+    section_id: str | None = None,
+    year_level: str | None = None,
     page: int = 1,
     show_deleted: bool = False,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    sections = section_service.list_sections(db, active_only=True)
+    try:
+        section_filter = _parse_optional_positive_int(section_id, "Section")
+        year_level_filter = _parse_optional_positive_int(year_level, "Year level")
+    except ValueError as exc:
+        return render(
+            request,
+            "students/list.html",
+            {
+                "error": str(exc),
+                "students": [],
+                "total": 0,
+                "page": 1,
+                "total_pages": 1,
+                "sections": sections,
+                "q": q or "",
+                "section_id": None,
+                "year_level": None,
+                "include_deleted": False,
+            },
+            status_code=400,
+        )
     include_deleted = show_deleted and user.role.value == "admin"
     students, total = student_service.list_students(
         db,
         q=q,
-        section_id=section_id,
-        year_level=year_level,
+        section_id=section_filter,
+        year_level=year_level_filter,
         include_deleted=include_deleted,
         page=page,
     )
-    sections = section_service.list_sections(db, active_only=True)
     total_pages = max((total + student_service.PAGE_SIZE - 1) // student_service.PAGE_SIZE, 1)
     return render(
         request,
@@ -81,8 +114,8 @@ def list_students_page(
             "total_pages": total_pages,
             "sections": sections,
             "q": q or "",
-            "section_id": section_id,
-            "year_level": year_level,
+            "section_id": section_filter,
+            "year_level": year_level_filter,
             "include_deleted": include_deleted,
         },
     )
