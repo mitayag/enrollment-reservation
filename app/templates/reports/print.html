@@ -16,13 +16,25 @@
   <p class="text-muted small">
     {% if filters.date_from %}From {{ filters.date_from }} {% endif %}
     {% if filters.date_to %}to {{ filters.date_to }} {% endif %}
+    {% if filters.program_id %}| Program ID {{ filters.program_id }} {% endif %}
     {% if filters.year_level %}| Year level {{ filters.year_level }} {% endif %}
     {% if filters.section_id %}| Section ID {{ filters.section_id }} {% endif %}
     — dates in Asia/Manila · {{ students|length }} record(s)
   </p>
+  {% if totals_by_program %}
+  <h2 class="h6">Totals by academic program</h2>
+  <table class="table table-bordered table-sm mb-3" style="max-width: 32rem;">
+    <thead><tr><th>Program</th><th>Name</th><th class="text-end">Students</th></tr></thead>
+    <tbody>
+      {% for code, name, count in totals_by_program %}
+      <tr><td>{{ code }}</td><td>{{ name }}</td><td class="text-end">{{ count }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
   <table class="table table-bordered table-sm">
     <thead>
-      <tr><th>ID</th><th>Last</th><th>First</th><th>M.I.</th><th>Section</th><th>Year</th><th>Telephone</th><th>Email</th><th>Encoded (Manila)</th></tr>
+      <tr><th>ID</th><th>Last</th><th>First</th><th>M.I.</th><th>Program</th><th>Section</th><th>Year</th><th>Telephone</th><th>Email</th><th>Encoded (Manila)</th></tr>
     </thead>
     <tbody>
       {% for student in students %}
@@ -31,6 +43,7 @@
         <td>{{ student.last_name }}</td>
         <td>{{ student.first_name }}</td>
         <td>{{ student.middle_initial or '' }}</td>
+        <td>{{ student.section.program.code if student.section and student.section.program else '' }}</td>
         <td>{{ student.section.name if student.section else '' }}</td>
         <td>{{ student.section.year_level if student.section else '' }}</td>
         <td>{{ student.telephone or '' }}</td>
@@ -38,7 +51,7 @@
         <td>{{ student.created_at | manila_time }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="9" class="text-center text-muted">No records match the filters.</td></tr>
+      <tr><td colspan="10" class="text-center text-muted">No records match the filters.</td></tr>
       {% endfor %}
     </tbody>
   </table>

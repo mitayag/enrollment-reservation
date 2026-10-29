@@ -65,27 +65,41 @@
             </div>
           </div>
           <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label" for="year_level_filter">Year level (filters sections)</label>
-              <select class="form-select" id="year_level_filter">
-                <option value="">All</option>
-                {% for yl in [1, 2, 3, 4] %}
-                <option value="{{ yl }}">{{ yl }}</option>
+            <div class="col-md-4 mb-3">
+              <label class="form-label" for="program_id">Program</label>
+              <select class="form-select" id="program_id" name="program_id" required>
+                <option value="">Select program…</option>
+                {% set current_program = f.program_id if f else (student.section.program_id if student and student.section else none) %}
+                {% for p in programs %}
+                <option value="{{ p.id }}" {{ 'selected' if current_program == p.id else '' }}>
+                  {{ p.code }} — {{ p.name }}
+                </option>
                 {% endfor %}
               </select>
             </div>
-            <div class="col-md-6 mb-3">
+            <div class="col-md-3 mb-3">
+              <label class="form-label" for="year_level">Year level</label>
+              <select class="form-select" id="year_level" name="year_level" required>
+                <option value="">Select year…</option>
+                {% set current_yl = f.year_level if f else (student.section.year_level if student and student.section else none) %}
+                {% for yl in [1, 2, 3, 4] %}
+                <option value="{{ yl }}" {{ 'selected' if current_yl == yl else '' }}>{{ yl }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-5 mb-3">
               <label class="form-label" for="section_id">Section</label>
               <select class="form-select" id="section_id" name="section_id" required>
                 <option value="">Select section…</option>
                 {% for s in sections %}
                 <option value="{{ s.id }}" data-year-level="{{ s.year_level }}"
+                        data-program-id="{{ s.program_id or '' }}"
                         {{ 'selected' if (f and f.section_id == s.id) or (not f and student and student.section_id == s.id) else '' }}>
-                  {{ s.name }} (YL {{ s.year_level }}){{ ' — inactive' if not s.is_active else '' }}
+                  {{ s.name }} ({{ s.program.code if s.program else 'No program' }} · YL {{ s.year_level }}){{ ' — inactive' if not s.is_active else '' }}
                 </option>
                 {% endfor %}
               </select>
-              <div class="form-text">Year level is derived from the selected section.</div>
+              <div class="form-text">Sections are filtered by the selected program and year level; program and year are derived from the section on save.</div>
             </div>
           </div>
           <div class="d-flex gap-2">
@@ -175,31 +189,39 @@
   });
   {% endif %}
 
-  const yearSelect = document.getElementById('year_level_filter');
+  const programSelect = document.getElementById('program_id');
+  const yearSelect = document.getElementById('year_level');
   const sectionSelect = document.getElementById('section_id');
   const preselected = sectionSelect.value;
   function applyFilter() {
+    const pid = programSelect.value;
     const yl = yearSelect.value;
     let firstVisible = null;
     for (const opt of sectionSelect.querySelectorAll('option[data-year-level]')) {
-      const match = !yl || opt.dataset.yearLevel === yl;
+      const programMatch = !pid || (opt.dataset.programId || '') === pid;
+      const yearMatch = !yl || opt.dataset.yearLevel === yl;
+      const match = programMatch && yearMatch;
       opt.hidden = !match;
       opt.disabled = !match;
       if (match && !firstVisible) firstVisible = opt;
     }
-    if (yl && preselected) {
+    if (preselected) {
       const pre = sectionSelect.querySelector('option[value="' + preselected + '"]');
       if (pre && !pre.hidden) sectionSelect.value = preselected;
-      else sectionSelect.value = '';
-    } else if (yl && !sectionSelect.value) {
+      else if (sectionSelect.value === preselected && pre && pre.hidden) sectionSelect.value = '';
+    } else if (!sectionSelect.value) {
       sectionSelect.value = '';
     }
   }
+  programSelect.addEventListener('change', applyFilter);
   yearSelect.addEventListener('change', applyFilter);
-  // Initialize: reveal the year level of the preselected section.
+  // Initialize: reveal the program/year of the preselected section.
   if (preselected) {
     const pre = sectionSelect.querySelector('option[value="' + preselected + '"]');
-    if (pre) { yearSelect.value = pre.dataset.yearLevel; }
+    if (pre) {
+      if (pre.dataset.programId) programSelect.value = pre.dataset.programId;
+      yearSelect.value = pre.dataset.yearLevel;
+    }
   }
   applyFilter();
 })();

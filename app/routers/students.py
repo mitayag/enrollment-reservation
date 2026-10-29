@@ -6,7 +6,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models.masterlist import StudentMasterlist
 from app.security import get_current_user
-from app.services import masterlist_service, section_service, student_service
+from app.services import masterlist_service, program_service, section_service, student_service
 from app.templating import render
 
 router = APIRouter(prefix="/students", tags=["students"])
@@ -14,6 +14,11 @@ router = APIRouter(prefix="/students", tags=["students"])
 
 def _form_context(form: dict | None = None) -> dict:
     return {"form": form or {}}
+
+
+def _parse_form_int(raw: str) -> int | None:
+    value = (raw or "").strip()
+    return int(value) if value.isdigit() and int(value) > 0 else None
 
 
 def _parse_optional_positive_int(raw: str | None, label: str) -> int | None:
@@ -67,15 +72,18 @@ def list_students_page(
     q: str | None = None,
     section_id: str | None = None,
     year_level: str | None = None,
+    program_id: str | None = None,
     page: int = 1,
     show_deleted: bool = False,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
     sections = section_service.list_sections(db, active_only=True)
+    programs = program_service.list_programs(db)
     try:
         section_filter = _parse_optional_positive_int(section_id, "Section")
         year_level_filter = _parse_optional_positive_int(year_level, "Year level")
+        program_filter = _parse_optional_positive_int(program_id, "Program")
     except ValueError as exc:
         return render(
             request,
@@ -87,9 +95,11 @@ def list_students_page(
                 "page": 1,
                 "total_pages": 1,
                 "sections": sections,
+                "programs": programs,
                 "q": q or "",
                 "section_id": None,
                 "year_level": None,
+                "program_id": None,
                 "include_deleted": False,
             },
             status_code=400,
@@ -100,6 +110,7 @@ def list_students_page(
         q=q,
         section_id=section_filter,
         year_level=year_level_filter,
+        program_id=program_filter,
         include_deleted=include_deleted,
         page=page,
     )
@@ -113,9 +124,11 @@ def list_students_page(
             "page": page,
             "total_pages": total_pages,
             "sections": sections,
+            "programs": programs,
             "q": q or "",
             "section_id": section_filter,
             "year_level": year_level_filter,
+            "program_id": program_filter,
             "include_deleted": include_deleted,
         },
     )
@@ -124,7 +137,12 @@ def list_students_page(
 @router.get("/new")
 def new_student_page(request: Request, db: Session = Depends(get_db), user=Depends(get_current_user)):
     sections = section_service.list_sections(db, active_only=True)
-    return render(request, "students/form.html", {"student": None, "sections": sections, "errors": []})
+    programs = program_service.list_programs(db, active_only=True)
+    return render(
+        request,
+        "students/form.html",
+        {"student": None, "sections": sections, "programs": programs, "errors": []},
+    )
 
 
 @router.post("/new")
@@ -136,6 +154,8 @@ def create_student(
     telephone: str = Form(""),
     email: str = Form(""),
     section_id: int = Form(...),
+    program_id: str = Form(""),
+    year_level: str = Form(""),
     masterlist_student_number: str = Form(""),
     masterlist_entry_id: str = Form(""),
     db: Session = Depends(get_db),
@@ -147,6 +167,8 @@ def create_student(
         if db.get(StudentMasterlist, entry_id) is None:
             entry_id = None
             masterlist_student_number = ""
+    program = _parse_form_int(program_id)
+    year = _parse_form_int(year_level)
     student, errors = student_service.create_student(
         db,
         first_name=first_name,
@@ -155,11 +177,14 @@ def create_student(
         telephone=telephone,
         email=email,
         section_id=section_id,
+        program_id=program,
+        year_level=year,
         created_by=user.id,
         masterlist_student_number=masterlist_student_number,
         masterlist_entry_id=entry_id,
     )
     sections = section_service.list_sections(db, active_only=True)
+    programs = program_service.list_programs(db, active_only=True)
     if errors:
         return render(
             request,
@@ -167,6 +192,7 @@ def create_student(
             {
                 "student": None,
                 "sections": sections,
+                "programs": programs,
                 "errors": errors,
                 "form": {
                     "first_name": first_name,
@@ -175,6 +201,8 @@ def create_student(
                     "telephone": telephone,
                     "email": email,
                     "section_id": section_id,
+                    "program_id": program,
+                    "year_level": year,
                     "masterlist_student_number": masterlist_student_number,
                     "masterlist_entry_id": masterlist_entry_id,
                 },
@@ -199,7 +227,12 @@ def edit_student_page(
     sections = section_service.list_sections(db, active_only=True)
     if student.section and not student.section.is_active and student.section not in sections:
         sections = [student.section, *sections]
-    return render(request, "students/form.html", {"student": student, "sections": sections, "errors": []})
+    programs = program_service.list_programs(db)
+    return render(
+        request,
+        "students/form.html",
+        {"student": student, "sections": sections, "programs": programs, "errors": []},
+    )
 
 
 @router.post("/{student_id}/edit")
@@ -212,6 +245,8 @@ def update_student(
     telephone: str = Form(""),
     email: str = Form(""),
     section_id: int = Form(...),
+    program_id: str = Form(""),
+    year_level: str = Form(""),
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
@@ -220,6 +255,8 @@ def update_student(
         raise HTTPException(status_code=404)
     if not student_service.can_modify(user, student):
         raise HTTPException(status_code=403)
+    program = _parse_form_int(program_id)
+    year = _parse_form_int(year_level)
     student, errors = student_service.update_student(
         db,
         student,
@@ -229,15 +266,22 @@ def update_student(
         telephone=telephone,
         email=email,
         section_id=section_id,
+        program_id=program,
+        year_level=year,
     )
-    sections = section_service.list_sections(db, active_only=True)
     if errors:
+        sections = section_service.list_sections(db, active_only=True)
+        current = student_service.get_student(db, student_id)
+        if current and current.section and not current.section.is_active and current.section not in sections:
+            sections = [current.section, *sections]
+        programs = program_service.list_programs(db)
         return render(
             request,
             "students/form.html",
             {
-                "student": student,
+                "student": current,
                 "sections": sections,
+                "programs": programs,
                 "errors": errors,
                 "form": {
                     "first_name": first_name,
@@ -246,6 +290,8 @@ def update_student(
                     "telephone": telephone,
                     "email": email,
                     "section_id": section_id,
+                    "program_id": program,
+                    "year_level": year,
                 },
             },
             status_code=400,

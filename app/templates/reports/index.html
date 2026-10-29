@@ -14,6 +14,17 @@
         <input class="form-control" type="date" id="date_to" name="date_to" value="{{ filters.date_to if filters else '' }}">
       </div>
       <div class="col-md-2">
+        <label class="form-label" for="program_id">Program</label>
+        <select class="form-select" id="program_id" name="program_id">
+          <option value="">All</option>
+          {% for p in programs %}
+          <option value="{{ p.id }}" {{ 'selected' if filters and filters.program_id == p.id|string else '' }}>
+            {{ p.code }} — {{ p.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1">
         <label class="form-label" for="year_level">Year level</label>
         <select class="form-select" id="year_level" name="year_level">
           <option value="">All</option>
@@ -22,19 +33,25 @@
           {% endfor %}
         </select>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-2">
         <label class="form-label" for="section_id">Section</label>
         <select class="form-select" id="section_id" name="section_id">
           <option value="">All</option>
           {% for s in sections %}
           <option value="{{ s.id }}" data-year-level="{{ s.year_level }}"
+                  data-program-id="{{ s.program_id or '' }}"
                   {{ 'selected' if filters and filters.section_id == s.id|string else '' }}>
-            {{ s.name }} (YL {{ s.year_level }})
+            {{ s.name }} ({{ s.program.code if s.program else 'No program' }} · YL {{ s.year_level }})
           </option>
           {% endfor %}
         </select>
       </div>
-      <div class="col-md-3 d-flex gap-2">
+      <div class="col-md-2">
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" name="group_by" value="program" id="group_by"
+                 {{ 'checked' if filters and filters.group_by == 'program' else '' }}>
+          <label class="form-check-label" for="group_by">Totals by program</label>
+        </div>
         <button type="submit" class="btn btn-primary">Generate</button>
       </div>
     </form>
@@ -46,21 +63,45 @@
 <div class="d-flex justify-content-between align-items-center mb-2">
   <span class="text-muted">{{ students|length }} record(s)</span>
   <div class="d-flex gap-2">
-    <a class="btn btn-outline-secondary btn-sm" href="/reports/print?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&year_level={{ filters.year_level }}&section_id={{ filters.section_id }}" target="_blank">Printable view</a>
-    <a class="btn btn-success btn-sm" href="/reports/export.csv?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&year_level={{ filters.year_level }}&section_id={{ filters.section_id }}">Export CSV</a>
+    <a class="btn btn-outline-secondary btn-sm" href="/reports/print?{{ filter_qs }}" target="_blank">Printable view</a>
+    <a class="btn btn-success btn-sm" href="/reports/export.csv?{{ filter_qs }}">Export CSV</a>
   </div>
 </div>
+{% if totals_by_program %}
+<div class="card mb-3">
+  <div class="card-body">
+    <h2 class="h6 mb-2">Totals by academic program</h2>
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Program</th><th>Name</th><th class="text-end">Students</th></tr></thead>
+      <tbody>
+        {% for code, name, count in totals_by_program %}
+        <tr><td>{{ code }}</td><td>{{ name }}</td><td class="text-end">{{ count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 <div class="card">
   <div class="table-responsive">
     <table class="table table-striped mb-0">
       <thead>
-        <tr><th>ID</th><th>Name</th><th>Section</th><th>Year</th><th>Telephone</th><th>Email</th><th>Encoded (Manila)</th></tr>
+        <tr><th>ID</th><th>Name</th><th>Program</th><th>Section</th><th>Year</th><th>Telephone</th><th>Email</th><th>Encoded (Manila)</th></tr>
       </thead>
       <tbody>
         {% for student in students %}
         <tr>
           <td>{{ student.id }}</td>
           <td>{{ student.full_name }}</td>
+          <td>
+            {% if student.section and student.section.program %}
+            {{ student.section.program.code }}
+            {% elif student.section %}
+            <span class="badge bg-warning text-dark">Unassigned</span>
+            {% else %}
+            —
+            {% endif %}
+          </td>
           <td>{{ student.section.name if student.section else '—' }}</td>
           <td>{{ student.section.year_level if student.section else '—' }}</td>
           <td>{{ student.telephone or '—' }}</td>
@@ -68,7 +109,7 @@
           <td>{{ student.created_at | manila_time }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="7" class="text-center text-muted py-4">No records match the filters.</td></tr>
+        <tr><td colspan="8" class="text-center text-muted py-4">No records match the filters.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -79,13 +120,16 @@
 {% block scripts %}
 <script>
 (function () {
+  const programSelect = document.getElementById('program_id');
   const yearSelect = document.getElementById('year_level');
   const sectionSelect = document.getElementById('section_id');
-  const preselected = sectionSelect.value;
-  function applyFilter() {
+  function applyCascade() {
+    const pid = programSelect.value;
     const yl = yearSelect.value;
     for (const opt of sectionSelect.querySelectorAll('option[data-year-level]')) {
-      const match = !yl || opt.dataset.yearLevel === yl;
+      const programMatch = !pid || (opt.dataset.programId || '') === pid;
+      const yearMatch = !yl || opt.dataset.yearLevel === yl;
+      const match = programMatch && yearMatch;
       opt.hidden = !match;
       opt.disabled = !match;
     }
@@ -93,8 +137,9 @@
       sectionSelect.value = '';
     }
   }
-  yearSelect.addEventListener('change', applyFilter);
-  applyFilter();
+  programSelect.addEventListener('change', applyCascade);
+  yearSelect.addEventListener('change', applyCascade);
+  applyCascade();
 })();
 </script>
 {% endblock %}

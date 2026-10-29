@@ -11,20 +11,49 @@
       <div class="card-body">
         <form method="post" action="{{ '/sections/%s/edit'|format(section.id) if section else '/sections/new' }}">
           <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          {% set f = form if form is defined and form else none %}
           <div class="mb-3">
-            <label class="form-label" for="name">Section name</label>
-            <input class="form-control" id="name" name="name" maxlength="100" required
-                   value="{{ form.name if form is defined and form else (section.name if section else '') }}">
+            <label class="form-label" for="program_id">Program</label>
+            <select class="form-select" id="program_id" name="program_id" required>
+              <option value="">Select program…</option>
+              {% set current_program = f.program_id if f else (section.program_id if section else none) %}
+              {% for p in programs %}
+              <option value="{{ p.id }}" {{ 'selected' if current_program == p.id else '' }}>
+                {{ p.code }} — {{ p.name }}{{ ' — inactive' if not p.is_active else '' }}
+              </option>
+              {% endfor %}
+            </select>
+            {% if section and not section.program_id %}
+            <div class="form-text text-warning">This section predates program assignment — select its academic program to save.</div>
+            {% endif %}
           </div>
           <div class="mb-3">
             <label class="form-label" for="year_level">Year level</label>
             <select class="form-select" id="year_level" name="year_level" required>
-              {% set current_yl = form.year_level if form is defined and form else (section.year_level if section else none) %}
+              {% set current_yl = f.year_level if f else (section.year_level if section else none) %}
+              <option value="">Select year level…</option>
               {% for yl in [1, 2, 3, 4] %}
               <option value="{{ yl }}" {{ 'selected' if current_yl == yl else '' }}>{{ yl }}</option>
               {% endfor %}
             </select>
           </div>
+          <div class="mb-3">
+            <label class="form-label" for="name">Section name</label>
+            <input class="form-control" id="name" name="name" maxlength="100" required
+                   value="{{ f.name if f else (section.name if section else '') }}">
+            <div class="form-text">Section names must be unique within their program.</div>
+          </div>
+          {% if section %}
+          <div class="mb-3">
+            <label class="form-label">Status</label>
+            <div>
+              <span class="badge {{ 'bg-success' if section.is_active else 'bg-secondary' }}">
+                {{ 'Active' if section.is_active else 'Inactive' }}
+              </span>
+              <span class="form-text ms-2">Change status from the Sections listing.</span>
+            </div>
+          </div>
+          {% endif %}
           <div class="d-flex gap-2">
             <button type="submit" class="btn btn-primary">Save</button>
             <a class="btn btn-outline-secondary" href="/sections">Cancel</a>

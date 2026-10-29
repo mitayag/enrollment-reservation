@@ -105,12 +105,29 @@ def csrf_from(client: TestClient, path: str = "/login") -> str:
     return match.group(1)
 
 
-def make_section(db_session, *, name="Section A", year_level=1, created_by=1, active=True) -> Section:
-    section = Section(name=name, year_level=year_level, is_active=active, created_by=created_by)
+def make_section(
+    db_session, *, name="Section A", year_level=1, created_by=1, active=True, program_id=None
+) -> Section:
+    section = Section(
+        name=name,
+        year_level=year_level,
+        program_id=program_id,
+        is_active=active,
+        created_by=created_by,
+    )
     db_session.add(section)
     db_session.commit()
     db_session.refresh(section)
     return section
+
+
+@pytest.fixture()
+def programs(db_session):
+    """Seed the academic program catalogue and index it by code."""
+    from app.services import program_service
+
+    program_service.seed_programs(db_session)
+    return {p.code: p for p in program_service.list_programs(db_session)}
 
 
 def make_student(

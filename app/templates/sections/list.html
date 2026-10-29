@@ -7,12 +7,20 @@
   <a class="btn btn-primary" href="/sections/new">Add section</a>
   {% endif %}
 </div>
+{% if unassigned_count %}
+<div class="alert alert-warning">
+  {{ unassigned_count }} section(s) have no academic program assigned yet.
+  {% if current_user.role.value == 'admin' %}
+  Assign each program via Edit so enrollment and reporting can group by program.
+  {% endif %}
+</div>
+{% endif %}
 <div class="card">
   <div class="table-responsive">
     <table class="table table-striped mb-0">
       <thead>
         <tr>
-          <th>ID</th><th>Name</th><th>Year level</th><th>Status</th>
+          <th>ID</th><th>Program</th><th>Year level</th><th>Section</th><th>Status</th>
           <th>Active students</th><th>Created</th><th>Created by</th><th></th>
         </tr>
       </thead>
@@ -20,8 +28,15 @@
         {% for section in sections %}
         <tr>
           <td>{{ section.id }}</td>
-          <td>{{ section.name }}</td>
+          <td>
+            {% if section.program %}
+            {{ section.program.code }} — {{ section.program.name }}
+            {% else %}
+            <span class="badge bg-warning text-dark">Unassigned</span>
+            {% endif %}
+          </td>
           <td>{{ section.year_level }}</td>
+          <td>{{ section.name }}</td>
           <td>
             <span class="badge {{ 'bg-success' if section.is_active else 'bg-secondary' }}">
               {{ 'Active' if section.is_active else 'Inactive' }}
@@ -43,11 +58,11 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="text-center text-muted py-4">No sections yet.</td></tr>
+        <tr><td colspan="9" class="text-center text-muted py-4">No sections yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
-<p class="text-muted small mt-2">Deactivated sections remain attached to historical student records.</p>
+<p class="text-muted small mt-2">Deactivated sections remain attached to historical student records. The same section name may exist in different programs.</p>
 {% endblock %}

@@ -15,6 +15,7 @@ def list_students(
     q: str | None = None,
     section_id: int | None = None,
     year_level: int | None = None,
+    program_id: int | None = None,
     include_deleted: bool = False,
     page: int = 1,
 ) -> tuple[list[Student], int]:
@@ -30,10 +31,14 @@ def list_students(
                 Student.middle_initial.ilike(like),
             )
         )
+    if section_id is not None or year_level is not None or program_id is not None:
+        stmt = stmt.join(Section)
     if section_id is not None:
         stmt = stmt.where(Student.section_id == section_id)
     if year_level is not None:
-        stmt = stmt.join(Section).where(Section.year_level == year_level)
+        stmt = stmt.where(Section.year_level == year_level)
+    if program_id is not None:
+        stmt = stmt.where(Section.program_id == program_id)
 
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = db.scalar(count_stmt) or 0
@@ -56,8 +61,12 @@ def validate_student_input(
     telephone: str,
     email: str,
     section_id: int | None,
+    program_id: int | None,
+    year_level: int | None,
     current_section_id: int | None = None,
 ) -> list[str]:
+    from app.models.program import Program
+
     errors: list[str] = []
     if not first_name.strip():
         errors.append("First name is required.")
@@ -71,6 +80,14 @@ def validate_student_input(
     if email and ("@" not in email or len(email) > 255):
         errors.append("A valid email address is required.")
 
+    if program_id is None:
+        errors.append("Program is required.")
+    elif db.get(Program, program_id) is None:
+        errors.append("Selected program does not exist.")
+    if year_level is None or year_level < 1 or year_level > 4:
+        errors.append("Year level must be between 1 and 4.")
+
+    section: Section | None = None
     if section_id is None:
         errors.append("Section is required.")
     else:
@@ -79,6 +96,23 @@ def validate_student_input(
             errors.append("Selected section does not exist.")
         elif not section.is_active and section.id != current_section_id:
             errors.append("Selected section is not active.")
+
+    if section is not None and program_id is not None and not any(
+        e.startswith("Selected program") for e in errors
+    ):
+        # Legacy sections without an assigned program stay usable only for
+        # the student's current section (existing relationships are preserved);
+        # newly chosen sections must belong to the selected program.
+        if section.program_id is None:
+            if section.id != current_section_id:
+                errors.append(
+                    "Selected section does not belong to the selected program. "
+                    "Ask an administrator to assign a program to this section."
+                )
+        elif section.program_id != program_id:
+            errors.append("Selected section does not belong to the selected program.")
+        if year_level is not None and section.year_level != year_level:
+            errors.append("Selected section does not belong to the selected year level.")
     return errors
 
 
@@ -91,6 +125,8 @@ def create_student(
     telephone: str,
     email: str,
     section_id: int,
+    program_id: int | None,
+    year_level: int | None,
     created_by: int,
     masterlist_student_number: str = "",
     masterlist_entry_id: int | None = None,
@@ -103,6 +139,8 @@ def create_student(
         telephone=telephone,
         email=email,
         section_id=section_id,
+        program_id=program_id,
+        year_level=year_level,
     )
     number = masterlist_student_number.strip()[:50]
     if number:
@@ -145,6 +183,8 @@ def update_student(
     telephone: str,
     email: str,
     section_id: int,
+    program_id: int | None,
+    year_level: int | None,
 ) -> tuple[Student | None, list[str]]:
     errors = validate_student_input(
         db,
@@ -154,6 +194,8 @@ def update_student(
         telephone=telephone,
         email=email,
         section_id=section_id,
+        program_id=program_id,
+        year_level=year_level,
         current_section_id=student.section_id,
     )
     if errors:

@@ -13,11 +13,22 @@
     {% endif %}
     <form method="get" action="/students" class="row g-2 align-items-end"
           onsubmit="return omitBlankFilters(this);">
-      <div class="col-md-3">
+      <div class="col-md-2">
         <label class="form-label" for="q">Search name</label>
         <input class="form-control" id="q" name="q" value="{{ q }}">
       </div>
       <div class="col-md-2">
+        <label class="form-label" for="program_id">Program</label>
+        <select class="form-select" id="program_id" name="program_id">
+          <option value="">All</option>
+          {% for p in programs %}
+          <option value="{{ p.id }}" {{ 'selected' if program_id == p.id else '' }}>
+            {{ p.code }} — {{ p.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1">
         <label class="form-label" for="year_level">Year level</label>
         <select class="form-select" id="year_level" name="year_level">
           <option value="">All</option>
@@ -32,7 +43,10 @@
           <option value="">All</option>
           {% for s in sections %}
           <option value="{{ s.id }}" data-year-level="{{ s.year_level }}"
-                  {{ 'selected' if section_id == s.id else '' }}>{{ s.name }} (YL {{ s.year_level }})</option>
+                  data-program-id="{{ s.program_id or '' }}"
+                  {{ 'selected' if section_id == s.id else '' }}>
+            {{ s.name }} ({{ s.program.code if s.program else 'No program' }} · YL {{ s.year_level }})
+          </option>
           {% endfor %}
         </select>
       </div>
@@ -57,7 +71,7 @@
     <table class="table table-striped mb-0">
       <thead>
         <tr>
-          <th>ID</th><th>Name</th><th>Telephone</th><th>Email</th>
+          <th>ID</th><th>Name</th><th>Program</th><th>Telephone</th><th>Email</th>
           <th>Section</th><th>Year</th><th>Encoded</th><th>Encoded by</th><th></th>
         </tr>
       </thead>
@@ -66,6 +80,15 @@
         <tr class="{{ 'table-secondary' if student.is_deleted else '' }}">
           <td>{{ student.id }}</td>
           <td>{{ student.full_name }}{% if student.is_deleted %} <span class="badge bg-danger">Deleted</span>{% endif %}</td>
+          <td>
+            {% if student.section and student.section.program %}
+            {{ student.section.program.code }}
+            {% elif student.section %}
+            <span class="badge bg-warning text-dark">Unassigned</span>
+            {% else %}
+            —
+            {% endif %}
+          </td>
           <td>{{ student.telephone or '—' }}</td>
           <td>{{ student.email or '—' }}</td>
           <td>{{ student.section.name if student.section else '—' }}</td>
@@ -84,7 +107,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" class="text-center text-muted py-4">No students found.</td></tr>
+        <tr><td colspan="10" class="text-center text-muted py-4">No students found.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -96,7 +119,7 @@
   <ul class="pagination justify-content-center">
     {% for p in range(1, total_pages + 1) %}
     <li class="page-item {{ 'active' if p == page else '' }}">
-      <a class="page-link" href="/students?page={{ p }}&q={{ q | urlencode }}{% if section_id %}&section_id={{ section_id }}{% endif %}{% if year_level %}&year_level={{ year_level }}{% endif %}{% if include_deleted %}&show_deleted=true{% endif %}">{{ p }}</a>
+      <a class="page-link" href="/students?page={{ p }}&q={{ q | urlencode }}{% if program_id %}&program_id={{ program_id }}{% endif %}{% if section_id %}&section_id={{ section_id }}{% endif %}{% if year_level %}&year_level={{ year_level }}{% endif %}{% if include_deleted %}&show_deleted=true{% endif %}">{{ p }}</a>
     </li>
     {% endfor %}
   </ul>
@@ -105,7 +128,7 @@
 <p class="text-muted small mt-2">Total: {{ total }} student(s). Faculty may edit or delete only records they created.</p>
 <script>
   // Drop blank filter controls (the "All" option) so the query string
-  // never contains empty section_id=/year_level= values.
+  // never contains empty program_id=/section_id=/year_level= values.
   function omitBlankFilters(form) {
     for (const el of form.querySelectorAll('input[name], select[name]')) {
       if (String(el.value).trim() === '') {
@@ -116,5 +139,28 @@
     }
     return true;
   }
+  // Section choices respond to the selected program and year level.
+  (function () {
+    const programSelect = document.getElementById('program_id');
+    const yearSelect = document.getElementById('year_level');
+    const sectionSelect = document.getElementById('section_id');
+    function applyCascade() {
+      const pid = programSelect.value;
+      const yl = yearSelect.value;
+      for (const opt of sectionSelect.querySelectorAll('option[data-year-level]')) {
+        const programMatch = !pid || (opt.dataset.programId || '') === pid;
+        const yearMatch = !yl || opt.dataset.yearLevel === yl;
+        const match = programMatch && yearMatch;
+        opt.hidden = !match;
+        opt.disabled = !match;
+      }
+      if (sectionSelect.selectedOptions.length && sectionSelect.selectedOptions[0].disabled) {
+        sectionSelect.value = '';
+      }
+    }
+    programSelect.addEventListener('change', applyCascade);
+    yearSelect.addEventListener('change', applyCascade);
+    applyCascade();
+  })();
 </script>
 {% endblock %}

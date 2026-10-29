@@ -320,9 +320,15 @@ class TestFacultyLookup:
         data = resp.json()
         assert len(data["results"]) <= data["limit"]
 
-    def test_selected_student_creates_reservation_not_masterlist(self, client, db_session, seed_users):
+    def test_selected_student_creates_reservation_not_masterlist(self, client, db_session, seed_users, programs):
         self._seed_masterlist(db_session, seed_users)
-        section = make_section(db_session, name="LK", year_level=1, created_by=seed_users["admin"].id)
+        section = make_section(
+            db_session,
+            name="LK",
+            year_level=1,
+            created_by=seed_users["admin"].id,
+            program_id=programs["BSIT-WD"].id,
+        )
         entry = db_session.query(StudentMasterlist).filter_by(student_number="S100").one()
         login(client, "facultya@test.local", "faculty-secret-pw-1")
         token = csrf_from(client, "/students/new")
@@ -335,6 +341,8 @@ class TestFacultyLookup:
                 "telephone": "09171112222",
                 "email": "juan@example.com",
                 "section_id": str(section.id),
+                "program_id": str(programs["BSIT-WD"].id),
+                "year_level": "1",
                 "masterlist_student_number": "S100",
                 "masterlist_entry_id": str(entry.id),
                 "_csrf": token,
@@ -350,15 +358,23 @@ class TestFacultyLookup:
         # Masterlist untouched.
         assert db_session.query(StudentMasterlist).count() == 3
 
-    def test_duplicate_active_reservation_rejected(self, client, db_session, seed_users):
+    def test_duplicate_active_reservation_rejected(self, client, db_session, seed_users, programs):
         self._seed_masterlist(db_session, seed_users)
-        section = make_section(db_session, name="LK2", year_level=1, created_by=seed_users["admin"].id)
+        section = make_section(
+            db_session,
+            name="LK2",
+            year_level=1,
+            created_by=seed_users["admin"].id,
+            program_id=programs["BSIT-WD"].id,
+        )
         login(client, "facultya@test.local", "faculty-secret-pw-1")
         token = csrf_from(client, "/students/new")
         data = {
             "first_name": "Juan",
             "last_name": "Dela Cruz",
             "section_id": str(section.id),
+            "program_id": str(programs["BSIT-WD"].id),
+            "year_level": "1",
             "masterlist_student_number": "S100",
             "_csrf": token,
         }
@@ -378,9 +394,15 @@ class TestFacultyLookup:
         data["_csrf"] = token
         assert client.post("/students/new", data=data, follow_redirects=False).status_code == 303
 
-    def test_manual_entry_without_lookup_still_works(self, client, db_session, seed_users):
+    def test_manual_entry_without_lookup_still_works(self, client, db_session, seed_users, programs):
         self._seed_masterlist(db_session, seed_users)
-        section = make_section(db_session, name="MANUAL", year_level=1, created_by=seed_users["admin"].id)
+        section = make_section(
+            db_session,
+            name="MANUAL",
+            year_level=1,
+            created_by=seed_users["admin"].id,
+            program_id=programs["BSIT-NA"].id,
+        )
         login(client, "facultya@test.local", "faculty-secret-pw-1")
         token = csrf_from(client, "/students/new")
         resp = client.post(
@@ -389,6 +411,8 @@ class TestFacultyLookup:
                 "first_name": "Manual",
                 "last_name": "Entry",
                 "section_id": str(section.id),
+                "program_id": str(programs["BSIT-NA"].id),
+                "year_level": "1",
                 "_csrf": token,
             },
             follow_redirects=False,
@@ -399,9 +423,15 @@ class TestFacultyLookup:
         student = db_session.query(Student).filter_by(last_name="Entry").one()
         assert student.masterlist_student_number is None
 
-    def test_reservation_survives_masterlist_replacement(self, client, db_session, seed_users):
+    def test_reservation_survives_masterlist_replacement(self, client, db_session, seed_users, programs):
         self._seed_masterlist(db_session, seed_users)
-        section = make_section(db_session, name="KEEP", year_level=1, created_by=seed_users["admin"].id)
+        section = make_section(
+            db_session,
+            name="KEEP",
+            year_level=1,
+            created_by=seed_users["admin"].id,
+            program_id=programs["BSCS"].id,
+        )
         login(client, "facultya@test.local", "faculty-secret-pw-1")
         token = csrf_from(client, "/students/new")
         client.post(
@@ -410,6 +440,8 @@ class TestFacultyLookup:
                 "first_name": "Juan",
                 "last_name": "Dela Cruz",
                 "section_id": str(section.id),
+                "program_id": str(programs["BSCS"].id),
+                "year_level": "1",
                 "masterlist_student_number": "S100",
                 "_csrf": token,
             },

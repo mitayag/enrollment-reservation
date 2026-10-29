@@ -6,6 +6,8 @@ Phase 1: authentication, section management, student management, reporting, dash
 
 Phase 2: password management (self-service change + administrator-assisted reset with forced change at next login), student masterlist CSV import with column mapping, validation preview, atomic replacement and batch history, plus faculty student lookup from the masterlist when encoding reservations.
 
+Phase 3: academic programs — a seeded program catalogue, sections belonging to programs (unique names per program), program-aware student registration with cascading section selection, program filtering across the student list and reports, and program-grouped report totals.
+
 ## Stack
 
 - Python 3.12 (image), FastAPI, Jinja2 server-rendered templates, Bootstrap 5 (vendored in `app/static/vendor`, no CDN)
@@ -18,9 +20,9 @@ Phase 2: password management (self-service change + administrator-assisted reset
 app/main.py          Application factory, CSRF middleware, exception handlers
 app/config.py        Settings from environment variables
 app/database.py      Engine, session factory, declarative base
-app/models/          User, Section, Student
-app/routers/         auth, dashboard, sections, students, reports, admin
-app/services/        Business logic (auth, sections, students, reports)
+app/models/          User, Program, Section, Student, masterlist tables
+app/routers/         auth, dashboard, sections, students, reports, admin, masterlist, account
+app/services/        Business logic (auth, programs, sections, students, reports, masterlist)
 app/templates/       Jinja2 templates (Bootstrap 5)
 app/static/          Vendored Bootstrap assets
 app/cli.py           One-time administrator provisioning command
@@ -94,7 +96,22 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm web pyte
 - Revisions live in `alembic/versions/`.
 - Apply forward: `alembic upgrade head` (inside the container; `DATABASE_URL` must point at the running database).
 - The entrypoint does **not** run migrations automatically — they are an explicit deploy step.
-- Phase 2 revision: `6f065db516b3` (password management + student masterlist); Phase 1 revision `c116480e0082` is unchanged and existing Phase 1 data is preserved.
+- Phase 1: `c116480e0082` (initial schema). Phase 2: `6f065db516b3` (password management + student masterlist). Both are unchanged; existing data is preserved.
+
+### Phase 3 rollout (two-step, protects existing sections)
+
+1. `alembic upgrade a3f2c8d91e04` — creates `programs`, seeds the six catalogue programs
+   idempotently (BSIT-WD, BSIT-NA, BSCS, BSEMC, BSCYB, BSCYB-3+2), and adds
+   `sections.program_id` as a **nullable** foreign key. Existing sections are intentionally
+   left unassigned — no program is ever auto-picked for them.
+2. Assign a program to every existing section via **Sections → Edit** (the Sections page
+   shows an "Unassigned" badge and a warning banner until none remain).
+3. `alembic upgrade head` (i.e., `d5e7f1a2b3c4`) — **refuses to run** while any section is
+   still unassigned (nothing is silently reclassified); once all are assigned it enforces
+   `program_id NOT NULL` and the per-program uniqueness index is fully authoritative.
+
+Re-seeding programs later is safe: `alembic` never duplicates them, and
+`python -m app.seed` inserts only missing codes.
 
 ## Security model
 
@@ -103,8 +120,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm web pyte
 - CSRF: session token verified on every POST/PUT/PATCH/DELETE (`_csrf` form field or `X-CSRF-Token` header); enforced by a body-replaying ASGI middleware.
 - Authorization: faculty may view all student records but edit/soft-delete only records they created; administrators may manage all records. Only administrators manage sections and user accounts.
 - Soft delete: students carry `deleted_at`; rows are never removed, preserving historical links.
-- Section uniqueness: partial unique index on active section names; deactivated sections keep student links and may free a name for reuse.
-- Year level: derived from the assigned section; validated on the server.
+- Section uniqueness: active sections are unique by (program, name); the same section name may exist in different programs. Deactivated sections keep student links and may free a name for reuse within their program.
+- Year level: chosen alongside the program on student forms; the server verifies the selected section belongs to both before saving, and both are derived from the section relationship on the record.
 - Reporting: timestamps stored in UTC, filtered/displayed in Asia/Manila; CSV export neutralizes spreadsheet formula injection.
 - Queries: parameterized via SQLAlchemy ORM; logs record method/path/status only — never student personal data.
 - Secrets: supplied via environment (`.env`, not committed); no hard-coded credentials anywhere.
@@ -138,6 +155,48 @@ and saves, which creates an enrollment reservation in `students` (not a masterli
 store the stable `masterlist_student_number` (and a nullable entry id that is nulled if the masterlist is
 replaced). When a student number is present, a second active reservation for the same number is rejected.
 Manual entry without any lookup still works exactly as in Phase 1.
+
+## Phase 3 features — academic programs
+
+### Program catalogue
+
+The `programs` table holds six seeded programs (unique `code`, `name`, `is_active`,
+`created_at`): BSIT-WD (BS IT - Web Dev), BSIT-NA (BS IT - Net Administration), BSCS (BS CS),
+BSEMC (BS EMC), BSCYB (BS Cybersecurity), and BSCYB-3+2 (BS Cybersecurity 3+2). Seeding is
+idempotent — the migration and `python -m app.seed` only insert missing codes, so re-running
+either never duplicates rows.
+
+### Section management with programs
+
+Add/Edit Section now requires a **Program** (dropdown of catalogue programs), Year Level, and
+Section Name, and displays the Active/Inactive status. Listing shows Program, Year Level,
+Section, and Status. Sections are unique within their program — the same name may exist in
+different programs. Pre-existing sections without a program show an "Unassigned" badge and a
+warning banner; administrators assign each one via Edit (the finalize migration then enforces
+`program_id NOT NULL` at the database level, as described in the migration section).
+
+### Program-aware student registration
+
+Add/Edit Student requires Program and Year Level alongside Section. Section choices cascade:
+selecting a program narrows the list to that program's sections, and a year level narrows it
+further. Server-side validation rejects any program/year/section combination that does not
+match the section's own program and year (mismatched combinations return a controlled 400
+with the form state preserved). The record stores only `section_id`; program and year are
+derived through the section relationship. Legacy sections that still lack a program remain
+usable only for the student currently assigned to them — new registrations must use an
+assigned section. Masterlist lookup continues to populate the form exactly as before.
+
+### Student list and reports by program
+
+The Students listing gains a Program column and a Program filter that works alongside name
+search, year level, and section — independently or combined, blank parameters treated as
+"All" (no 422s), and all active filters preserved across pagination. Section choices respond
+dynamically to the selected program and year.
+
+Reports accept date-encoded from/to, Program, Year Level, and Section filters (also
+blank-safe). Program appears in the on-screen results, the printable view, and the CSV
+export. A "Totals by program" option groups the filtered result set by academic program
+(including an Unassigned bucket for legacy sections).
 
 ## Operations notes (Ubuntu VM / Proxmox, later phase)
 

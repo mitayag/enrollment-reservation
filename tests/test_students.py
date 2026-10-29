@@ -2,9 +2,17 @@ from tests.conftest import csrf_from, login, make_section, make_student
 
 
 class TestStudentCRUD:
-    def test_create_student_derives_year_level_from_section(self, client, db_session, seed_users):
+    def test_create_student_derives_program_and_year_from_section(
+        self, client, db_session, seed_users, programs
+    ):
         admin = seed_users["admin"]
-        section = make_section(db_session, name="S-YL3", year_level=3, created_by=admin.id)
+        section = make_section(
+            db_session,
+            name="S-YL3",
+            year_level=3,
+            created_by=admin.id,
+            program_id=programs["BSIT-WD"].id,
+        )
         login(client, "admin@test.local", "admin-secret-pw-123")
         token = csrf_from(client, "/students/new")
         resp = client.post(
@@ -16,6 +24,8 @@ class TestStudentCRUD:
                 "telephone": "09171234567",
                 "email": "maria@example.com",
                 "section_id": str(section.id),
+                "program_id": str(programs["BSIT-WD"].id),
+                "year_level": "3",
                 "_csrf": token,
             },
             follow_redirects=False,
@@ -27,13 +37,16 @@ class TestStudentCRUD:
         assert student is not None
         assert student.section_id == section.id
         assert student.section.year_level == 3
+        assert student.section.program_id == programs["BSIT-WD"].id
         assert student.created_by == admin.id
         resp = client.get("/students?year_level=3")
         assert "Santos" in resp.text
         resp = client.get("/students?year_level=1")
         assert "Santos" not in resp.text
+        resp = client.get(f"/students?program_id={programs['BSIT-WD'].id}")
+        assert "Santos" in resp.text
 
-    def test_create_student_requires_section(self, client, seed_users):
+    def test_create_student_requires_section(self, client, seed_users, programs):
         login(client, "admin@test.local", "admin-secret-pw-123")
         token = csrf_from(client, "/students/new")
         resp = client.post(
@@ -42,31 +55,131 @@ class TestStudentCRUD:
                 "first_name": "No",
                 "last_name": "Section",
                 "section_id": "99999",
+                "program_id": str(programs["BSIT-WD"].id),
+                "year_level": "1",
                 "_csrf": token,
             },
         )
         assert resp.status_code == 400
         assert "does not exist" in resp.text
 
-    def test_create_student_with_inactive_section_rejected(self, client, db_session, seed_users):
-        section = make_section(db_session, name="INACT", year_level=1, created_by=seed_users["admin"].id, active=False)
+    def test_mismatched_program_and_section_rejected(self, client, db_session, seed_users, programs):
+        admin = seed_users["admin"]
+        section = make_section(
+            db_session,
+            name="MM-SEC",
+            year_level=1,
+            created_by=admin.id,
+            program_id=programs["BSCS"].id,
+        )
         login(client, "admin@test.local", "admin-secret-pw-123")
         token = csrf_from(client, "/students/new")
         resp = client.post(
             "/students/new",
-            data={"first_name": "X", "last_name": "Y", "section_id": str(section.id), "_csrf": token},
+            data={
+                "first_name": "Bad",
+                "last_name": "Match",
+                "section_id": str(section.id),
+                "program_id": str(programs["BSIT-WD"].id),  # wrong program
+                "year_level": "1",
+                "_csrf": token,
+            },
+        )
+        assert resp.status_code == 400
+        assert "does not belong to the selected program" in resp.text
+
+    def test_mismatched_year_and_section_rejected(self, client, db_session, seed_users, programs):
+        admin = seed_users["admin"]
+        section = make_section(
+            db_session,
+            name="MM-SEC2",
+            year_level=2,
+            created_by=admin.id,
+            program_id=programs["BSCS"].id,
+        )
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        token = csrf_from(client, "/students/new")
+        resp = client.post(
+            "/students/new",
+            data={
+                "first_name": "Bad",
+                "last_name": "Year",
+                "section_id": str(section.id),
+                "program_id": str(programs["BSCS"].id),
+                "year_level": "1",  # wrong year
+                "_csrf": token,
+            },
+        )
+        assert resp.status_code == 400
+        assert "does not belong to the selected year level" in resp.text
+
+    def test_cannot_assign_legacy_section_to_new_student(self, client, db_session, seed_users, programs):
+        admin = seed_users["admin"]
+        legacy = make_section(
+            db_session, name="LEGACY-STU", year_level=1, created_by=admin.id, program_id=None
+        )
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        token = csrf_from(client, "/students/new")
+        resp = client.post(
+            "/students/new",
+            data={
+                "first_name": "Legacy",
+                "last_name": "Student",
+                "section_id": str(legacy.id),
+                "program_id": str(programs["BSCS"].id),
+                "year_level": "1",
+                "_csrf": token,
+            },
+        )
+        assert resp.status_code == 400
+        assert "does not belong to the selected program" in resp.text
+
+    def test_create_student_with_inactive_section_rejected(self, client, db_session, seed_users, programs):
+        section = make_section(
+            db_session,
+            name="INACT",
+            year_level=1,
+            created_by=seed_users["admin"].id,
+            active=False,
+            program_id=programs["BSCS"].id,
+        )
+        login(client, "admin@test.local", "admin-secret-pw-123")
+        token = csrf_from(client, "/students/new")
+        resp = client.post(
+            "/students/new",
+            data={
+                "first_name": "X",
+                "last_name": "Y",
+                "section_id": str(section.id),
+                "program_id": str(programs["BSCS"].id),
+                "year_level": "1",
+                "_csrf": token,
+            },
         )
         assert resp.status_code == 400
         assert "not active" in resp.text
 
-    def test_faculty_creates_student_records_creator(self, client, db_session, seed_users):
+    def test_faculty_creates_student_records_creator(self, client, db_session, seed_users, programs):
         faculty = seed_users["faculty_a"]
-        section = make_section(db_session, name="FAC-SEC", year_level=1, created_by=seed_users["admin"].id)
+        section = make_section(
+            db_session,
+            name="FAC-SEC",
+            year_level=1,
+            created_by=seed_users["admin"].id,
+            program_id=programs["BSCS"].id,
+        )
         login(client, "facultya@test.local", "faculty-secret-pw-1")
         token = csrf_from(client, "/students/new")
         resp = client.post(
             "/students/new",
-            data={"first_name": "Ana", "last_name": "Reyes", "section_id": str(section.id), "_csrf": token},
+            data={
+                "first_name": "Ana",
+                "last_name": "Reyes",
+                "section_id": str(section.id),
+                "program_id": str(programs["BSCS"].id),
+                "year_level": "1",
+                "_csrf": token,
+            },
             follow_redirects=False,
         )
         assert resp.status_code == 303
@@ -75,9 +188,15 @@ class TestStudentCRUD:
         student = db_session.query(Student).filter_by(last_name="Reyes").one()
         assert student.created_by == faculty.id
 
-    def test_faculty_can_edit_own_student(self, client, db_session, seed_users):
+    def test_faculty_can_edit_own_student(self, client, db_session, seed_users, programs):
         faculty = seed_users["faculty_a"]
-        section = make_section(db_session, name="OWN", year_level=1, created_by=seed_users["admin"].id)
+        section = make_section(
+            db_session,
+            name="OWN",
+            year_level=1,
+            created_by=seed_users["admin"].id,
+            program_id=programs["BSCS"].id,
+        )
         student = make_student(db_session, section_id=section.id, created_by=faculty.id)
         login(client, "facultya@test.local", "faculty-secret-pw-1")
         token = csrf_from(client, f"/students/{student.id}/edit")
@@ -87,6 +206,8 @@ class TestStudentCRUD:
                 "first_name": "Updated",
                 "last_name": "Name",
                 "section_id": str(section.id),
+                "program_id": str(programs["BSCS"].id),
+                "year_level": "1",
                 "_csrf": token,
             },
             follow_redirects=False,
@@ -116,8 +237,14 @@ class TestStudentCRUD:
         db_session.refresh(student)
         assert student.first_name != "Hack"
 
-    def test_admin_can_edit_any_student(self, client, db_session, seed_users):
-        section = make_section(db_session, name="ANY", year_level=1, created_by=seed_users["admin"].id)
+    def test_admin_can_edit_any_student(self, client, db_session, seed_users, programs):
+        section = make_section(
+            db_session,
+            name="ANY",
+            year_level=1,
+            created_by=seed_users["admin"].id,
+            program_id=programs["BSCS"].id,
+        )
         student = make_student(db_session, section_id=section.id, created_by=seed_users["faculty_b"].id)
         login(client, "admin@test.local", "admin-secret-pw-123")
         token = csrf_from(client, f"/students/{student.id}/edit")
@@ -127,6 +254,8 @@ class TestStudentCRUD:
                 "first_name": "AdminEdit",
                 "last_name": "Done",
                 "section_id": str(section.id),
+                "program_id": str(programs["BSCS"].id),
+                "year_level": "1",
                 "_csrf": token,
             },
             follow_redirects=False,
@@ -184,9 +313,22 @@ class TestStudentCRUD:
         assert "Zzyzx" in resp.text
         assert "Person" not in resp.text
 
-    def test_faculty_cannot_keep_inactive_section_on_change(self, client, db_session, seed_users):
-        active = make_section(db_session, name="ACT", year_level=1, created_by=seed_users["admin"].id)
-        inactive = make_section(db_session, name="INACT2", year_level=2, created_by=seed_users["admin"].id, active=False)
+    def test_faculty_cannot_keep_inactive_section_on_change(self, client, db_session, seed_users, programs):
+        active = make_section(
+            db_session,
+            name="ACT",
+            year_level=1,
+            created_by=seed_users["admin"].id,
+            program_id=programs["BSCS"].id,
+        )
+        inactive = make_section(
+            db_session,
+            name="INACT2",
+            year_level=2,
+            created_by=seed_users["admin"].id,
+            active=False,
+            program_id=programs["BSCS"].id,
+        )
         student = make_student(db_session, section_id=active.id, created_by=seed_users["admin"].id)
         login(client, "admin@test.local", "admin-secret-pw-123")
         token = csrf_from(client, f"/students/{student.id}/edit")
@@ -196,6 +338,8 @@ class TestStudentCRUD:
                 "first_name": "Juan",
                 "last_name": "Dela Cruz",
                 "section_id": str(inactive.id),
+                "program_id": str(programs["BSCS"].id),
+                "year_level": "2",
                 "_csrf": token,
             },
         )

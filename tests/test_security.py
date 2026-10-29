@@ -20,12 +20,17 @@ class TestCSRF:
         )
         assert resp.status_code == 403
 
-    def test_post_with_valid_token_accepted(self, client, seed_users):
+    def test_post_with_valid_token_accepted(self, client, seed_users, programs):
         login(client, "admin@test.local", "admin-secret-pw-123")
         token = csrf_from(client, "/sections/new")
         resp = client.post(
             "/sections/new",
-            data={"name": "OK-TOKEN", "year_level": "1", "_csrf": token},
+            data={
+                "name": "OK-TOKEN",
+                "year_level": "1",
+                "program_id": str(programs["BSCS"].id),
+                "_csrf": token,
+            },
             follow_redirects=False,
         )
         assert resp.status_code == 303
